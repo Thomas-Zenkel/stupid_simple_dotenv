@@ -8,7 +8,7 @@
 //!
 //! fn main() {
 //!    to_env().ok();
-//!    println!("Hello, {}!", std::env::var("USER").unwrap());// in .env file: USER=world
+//!    println!("Hello, {}!", std::env::var("myuser").unwrap());// in .env file: myuser=world
 //! }
 //!
 
@@ -17,7 +17,7 @@ use std::{fs::File, io::BufRead, path::Path};
 /// ```rust
 /// fn main() {
 ///    stupid_simple_dotenv::to_env(); // reads .env file and stores the key value pairs as environment variables
-///    let value = std::env::var("user").unwrap(); //Works if key value pair is present in .env file
+///    let value = std::env::var("myuser").unwrap(); //Works if key value pair is present in .env file
 /// }
 ///
 /// ```
@@ -39,7 +39,7 @@ pub fn to_vec() -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
 /// ```rust
 /// fn main() {
 ///     stupid_simple_dotenv::file_to_env("other.env");
-///     let value = std::env::var("user").unwrap();
+///     let value = std::env::var("myuser").unwrap();
 ///     assert_eq!(value, "world");
 /// }
 pub fn file_to_env<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {

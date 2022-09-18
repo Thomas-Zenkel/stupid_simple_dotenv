@@ -39,8 +39,8 @@ pub fn to_vec() -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
 /// ```rust
 /// fn main() {
 ///     stupid_simple_dotenv::file_to_env("other.env");
-///     let value = std::env::var("myuser").unwrap();
-///     assert_eq!(value, "world");
+///     let value = std::env::var("other_user").unwrap();
+///     assert_eq!(value, "other user name");
 /// }
 pub fn file_to_env<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {
     let list = read(path)?;

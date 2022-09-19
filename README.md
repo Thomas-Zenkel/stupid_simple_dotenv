@@ -46,9 +46,9 @@ other_user = other user name
 key0=value
  key1= value
 key2=value
-key3='value
-key4=`value
-key5=`value``
+key3='value'
+key4=`value`
+key5=` value with spaces `
  #comment
 key6 = value with spaces inside
 key 7= value:with#special&😀UTF-8 Chars🦀

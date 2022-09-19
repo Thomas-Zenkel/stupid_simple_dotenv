@@ -31,7 +31,29 @@ fn main() {
     }
 }
 ```
+  
+## Valid .env file
 
+.env files are simply configuration files in which a key-value pair separated by a = character is specified per line.  
+The keys are to be specified without quotes.  
+The values can be specified also without, however, are permissible also: ", ' and ` as quotes.  
+Comments are to be introduced with # and must stand in a new line. Comments after values are not recognized and interpreted as values. Spaces before or after keys and values are ignored. If they are intended, quotes must be used.  
+Valid lines of an .env file for this parser are:
+  
+```env
+myuser = world
+other_user = other user name
+key0=value
+ key1= value
+key2=value
+key3='value
+key4=`value
+key5=`value``
+ #comment
+key6 = value with spaces inside
+key 7= value:with#special&😀UTF-8 Chars🦀
+key-8="value:with#special&😀UTF-8 Chars🦀and_quote"
+```
 ## License
 
 <sup>

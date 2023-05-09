@@ -10,21 +10,20 @@
 //!    match to_env(){
 //!       Ok(_) => println!("Success reading .env"),
 //!       Err(e) if e.kind == "io" =>{
-//!         eprintln!("IO-Error better not ignore! {}", e);
+//!         println!("IO-Error better not ignore! {}", e);
 //!         // you can return the Error: return Err(e.into());
 //!       },
 //!       Err(e) if e.kind == "LinesError" => {
-//!         eprintln!("Errors in some lines of .env: {}", e);
+//!         println!("Errors in some lines of .env: {}", e);
 //!       },
 //!       Err(e) => {
-//!         eprintln!("Error {}", e);
+//!         println!("Error {}", e);
 //!         // You can return the Error return Err(e.into());
 //!       },
 //!    };
-//!    let user= match std::env::var("USER") {
-//!       Ok(val) => val,
-//!      Err(_) => panic!("USER not found in environment"),
-//!   };
+//!    let user = std::env::var("USER")?; // if USER is not set, this will return an error
+//!    println!("USER: {}", user);
+//!    Ok(())
 //! }
 //!
 
@@ -57,8 +56,8 @@ impl From<std::io::Error> for SimpleEnvError {
 /// Reads .env file stores the key value pairs as environment variables.
 /// ```rust
 /// fn main() {
-///    stupid_simple_dotenv::to_env(); // reads .env file and stores the key value pairs as environment variables
-///    let value = std::env::var("key").unwrap(); //Works if key value pair is present in .env file
+///    let _ = stupid_simple_dotenv::to_env(); // reads .env file and stores the key value pairs as environment variables
+///    let value = std::env::var("key").expect("Key 'key' not found."); //Works if key value pair is present in .env file
 /// }
 ///
 /// ```
@@ -73,7 +72,7 @@ pub fn to_env() -> Result<(), SimpleEnvError> {
 /// Reads .env file to a vector of key value pairs tuples.
 /// ```rust
 /// fn main() {
-///     let list = stupid_simple_dotenv::to_vec().unwrap(); // reads .env file to a vector of key value pairs tuples
+///     let list = stupid_simple_dotenv::to_vec().expect("Can't read .env"); // reads .env file to a vector of key value pairs tuples
 ///     for line in list {
 ///         println! ("Key:{}, Value:{}",line.0, line.1);
 ///     }
@@ -263,7 +262,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic]
     fn it_works() {
         to_env().unwrap();
     }

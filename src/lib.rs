@@ -1,27 +1,68 @@
 #![allow(clippy::needless_doctest_main)]
-//! Reads key value pairs from an .env or any other file and stores them
-//! as easily available environment variables.
-//! Since dotenv is no longer maintained, this is an simpler smaller alternative.
+//! Reads key-value pairs from a file, such as an .env file, and makes them
+//! easily accessible as environment variables. This crate provides a simpler and smaller
+//! alternative to dotenv, which is no longer maintained.
 //! # Example
 //! ```rust
 //! use stupid_simple_dotenv::to_env;
 //!
-//! fn main() {
-//!    to_env().ok();
-//!    println!("Hello, {}!", std::env::var("myuser").unwrap());// in .env file: myuser=world
+//! fn main() ->Result<(), Box<dyn std::error::Error>> {
+//!    match to_env(){
+//!       Ok(_) => println!("Success reading .env"),
+//!       Err(e) if e.kind == "io" =>{
+//!         eprintln!("IO-Error better not ignore! {}", e);
+//!        return Err(e.into());
+//!       },
+//!       Err(e) if e.kind == "LinesError" => {
+//!         eprintln!("Errors in some lines of .env: {}", e);
+//!       },
+//!       Err(e) => {
+//!         eprintln!("Error {}", e);
+//!         return Err(e.into());
+//!       },
+//!    };
+//!    let user= match std::env::var("USER") {
+//!       Ok(val) => val,
+//!      Err(_) => panic!("USER not found in environment"),
+//!   };
 //! }
 //!
 
-use std::{fs::File, io::BufRead, path::Path};
+use std::{error::Error, fmt::Display, fs::File, io::BufRead, path::Path};
+#[derive(Debug)]
+pub struct SimpleEnvError {
+    pub kind: String,
+    message: String,
+}
+
+impl Display for SimpleEnvError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.kind, self.message)
+    }
+}
+impl Error for SimpleEnvError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+impl From<std::io::Error> for SimpleEnvError {
+    fn from(error: std::io::Error) -> Self {
+        SimpleEnvError {
+            kind: String::from("io"),
+            message: error.to_string(),
+        }
+    }
+}
+
 /// Reads .env file stores the key value pairs as environment variables.
 /// ```rust
 /// fn main() {
 ///    stupid_simple_dotenv::to_env(); // reads .env file and stores the key value pairs as environment variables
-///    let value = std::env::var("myuser").unwrap(); //Works if key value pair is present in .env file
+///    let value = std::env::var("key").unwrap(); //Works if key value pair is present in .env file
 /// }
 ///
 /// ```
-pub fn to_env() -> Result<(), Box<dyn std::error::Error>> {
+pub fn to_env() -> Result<(), SimpleEnvError> {
     let list = read(".env")?;
     for line in list {
         let (key, value) = (line.0, line.1);
@@ -29,19 +70,20 @@ pub fn to_env() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
-
-pub fn to_vec() -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+/// Reads .env file to a vector of key value pairs tuples.
+/// ```rust
+/// fn main() {
+///     let list = stupid_simple_dotenv::to_vec().unwrap(); // reads .env file to a vector of key value pairs tuples
+///     for line in list {
+///         println! ("Key:{}, Value:{}",line.0, line.1);
+///     }
+/// }
+/// ```
+pub fn to_vec() -> Result<Vec<(String, String)>, SimpleEnvError> {
     let list = read(".env")?;
     Ok(list)
 }
 
-/// Reads named file stores the key value pairs as environment variables.
-/// ```rust
-/// fn main() {
-///     stupid_simple_dotenv::file_to_env("other.env");
-///     let value = std::env::var("other_user").unwrap();
-///     assert_eq!(value, "other user name");
-/// }
 pub fn file_to_env<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {
     let list = read(path)?;
     for line in list {
@@ -71,21 +113,31 @@ pub fn file_to_vec<P: AsRef<Path>>(
 /// ```rust
 /// fn main() {
 ///     let value = stupid_simple_dotenv::get_or("key_not_here", "default_key");
-///     println!("{}", &value);
 ///     assert_eq!("default_key", &value);
 /// }
 pub fn get_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_owned())
 }
-fn read<P: AsRef<Path>>(path: P) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
-    let f = File::open(path)?;
+
+fn read<P: AsRef<Path>>(path: P) -> Result<Vec<(String, String)>, SimpleEnvError> {
+    let f = match File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            return Err(SimpleEnvError {
+                kind: String::from("io"),
+                message: e.to_string(),
+            })
+        }
+    };
     let lines = std::io::BufReader::new(f).lines();
     parse(lines)
 }
 
 fn parse(
     lines: impl Iterator<Item = Result<String, std::io::Error>>,
-) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<(String, String)>, SimpleEnvError> {
+    let mut error_lines = Vec::new();
+    let mut num_error_lines = 0;
     let mut list = Vec::new();
     let lines = lines;
     for (col, line) in lines.enumerate() {
@@ -97,36 +149,113 @@ fn parse(
         let parsed = match parse_line(line) {
             Ok(parsed) => parsed,
             Err(e) => {
-                return Err(format!("Error parsing line {}. {}", col + 1, e).into());
+                num_error_lines += 1;
+                if error_lines.len() < 10 {
+                    error_lines.push(format!("Error in Line {col}: {e}"));
+                }
+                error_lines.push(format!("Error in Line {col}: {e}"));
+                continue;
             }
         };
         list.push((parsed.0.to_owned(), parsed.1.to_owned()));
     }
-    Ok(list)
-}
-fn parse_line(s: &str) -> Result<(&str, &str), Box<dyn std::error::Error>> {
-    let mut parts = s.splitn(2, '=');
-    let key = match parts.next() {
-        Some(key) => key.trim_end(),
-        None => return Err(format!("No key found in line '{}'", s).into()),
-    };
-
-    let value = match parts.next() {
-        Some(value) => value.trim_start(),
-        None => return Err(format!("No value found in line '{}'", s).into()),
-    };
-    let value = remove_quotes(value);
-    Ok((key, value))
-}
-
-fn remove_quotes(s: &str) -> &str {
-    if s.starts_with('"') && s.ends_with('"')
-        || s.starts_with('\'') && s.ends_with('\'')
-        || s.starts_with('`') && s.ends_with('`')
-    {
-        return &s[1..s.len() - 1];
+    if error_lines.is_empty() {
+        Ok(list)
+    } else {
+        if num_error_lines > error_lines.len() {
+            error_lines.push(format!(
+                "And {} more errors in .env file",
+                num_error_lines - error_lines.len()
+            ));
+        }
+        Err(SimpleEnvError {
+            kind: "LinesError".to_string(),
+            message: error_lines.join("\n"),
+        })
     }
-    s
+}
+
+fn parse_line(s: &str) -> Result<(&str, &str), Box<dyn Error>> {
+    let mut name_begin: usize = 0;
+    let mut name_end: usize = 0;
+    let mut value_begin: usize = 0;
+    let mut value_end: usize = 0;
+    let mut in_name = true;
+    let mut in_value = false;
+    let mut quotes = 'f';
+    for (pos, c) in s.chars().enumerate() {
+        match c {
+            '"' | '\'' | '`' => {
+                if quotes != 'f' {
+                    //We are in Quotes
+                    if quotes == c {
+                        //End of Quotes
+                        quotes = 'f';
+                        if in_name {
+                            name_end = pos - 1;
+                        }
+                        if in_value {
+                            value_end = pos - 1;
+                            break; //Done
+                        }
+                    }
+                } else {
+                    //We are not in Quotes, let it begin
+                    quotes = c;
+                    if in_name {
+                        name_begin = pos + 1;
+                    }
+                    if in_value {
+                        value_begin = pos + 1;
+                    }
+                }
+            }
+            '=' => {
+                if quotes != 'f' {
+                    continue;
+                }
+                if in_name {
+                    in_name = false;
+                    in_value = true;
+                    if name_end == 0 && pos > 0 {
+                        name_end = pos - 1;
+                    }
+                }
+            }
+            '#' => {
+                if quotes != 'f' {
+                    continue;
+                }
+                if in_value {
+                    value_end = pos;
+                    break;
+                }
+            }
+            _ => {
+                if in_name {
+                    if c.is_whitespace() && quotes == 'f' {
+                        continue;
+                    }
+                    name_end = pos;
+                } else if c.is_whitespace() && quotes == 'f' {
+                    continue;
+                }
+                if in_value {
+                    value_end = pos;
+                    if value_begin == 0 {
+                        value_begin = pos;
+                    }
+                }
+            }
+        }
+    }
+    if value_begin == 0 || name_end == 0 {
+        Err(format!("No name or value in '{s}'").into())
+    } else if value_begin == 0 {
+        Err("No value".into())
+    } else {
+        Ok((&s[name_begin..=name_end], &s[value_begin..=value_end]))
+    }
 }
 
 #[cfg(test)]
@@ -134,13 +263,15 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic]
     fn it_works() {
         to_env().unwrap();
     }
 
     #[test]
-    fn test_parse_line() {
+    fn test_parse_line_new() {
         assert_eq!(parse_line("FOO=BAR").unwrap(), ("FOO", "BAR"));
+        assert_eq!(parse_line("\"FOO\"=\"BAR\"").unwrap(), ("FOO", "BAR"));
         assert_eq!(parse_line("FOO = BAR").unwrap(), ("FOO", "BAR"));
         assert_eq!(parse_line("FOO=\"BAR\"").unwrap(), ("FOO", "BAR"));
         assert_eq!(parse_line("FOO='BAR'").unwrap(), ("FOO", "BAR"));
@@ -148,6 +279,10 @@ mod tests {
         assert_eq!(parse_line("FOO=\t `BAR`").unwrap(), ("FOO", "BAR"));
         assert_eq!(parse_line("FOO\t=\t `BAR`").unwrap(), ("FOO", "BAR"));
         assert_eq!(parse_line("FOO\t=\t ` BAR`").unwrap(), ("FOO", " BAR"));
+        assert_eq!(
+            parse_line("FOO\t=\t ` BAR`#comment").unwrap(),
+            ("FOO", " BAR")
+        );
         assert_eq!(parse_line("FOO\t=\t ` BAR `").unwrap(), ("FOO", " BAR "));
         assert_eq!(
             parse_line("FOO\t   =   \t ` BAR `").unwrap(),
@@ -157,17 +292,10 @@ mod tests {
             parse_line(" FOO\t   =   \t ` BAR `").unwrap(),
             (" FOO", " BAR ")
         );
-    }
 
-    #[test]
-    fn test_remove_quotes() {
-        assert_eq!(remove_quotes("BAR"), "BAR");
-        assert_eq!(remove_quotes("\"BAR\""), "BAR");
-        assert_eq!(remove_quotes("'BAR'"), "BAR");
-        assert_eq!(remove_quotes("`BAR`"), "BAR");
-        assert_eq!(remove_quotes(" `BAR`"), " `BAR`");
-        assert_eq!(remove_quotes(" ` BAR`"), " ` BAR`");
-        assert_eq!(remove_quotes(" ` BAR `"), " ` BAR `");
+        assert_eq!(true, matches!(parse_line(" FOO\t   = "), Result::Err(_)));
+        assert_eq!(true, matches!(parse_line(" FOO\t   ="), Result::Err(_)));
+        assert_eq!(true, matches!(parse_line("="), Result::Err(_)));
     }
 
     #[test]
@@ -182,7 +310,13 @@ FOO4='BAR4'
 FOO5=`BAR5`
 "#;
         let lines = env_sim.lines().map(|s| Ok(s.to_owned()));
+        let lines_clone = lines.clone();
+        let start = std::time::Instant::now();
         let list = parse(lines).unwrap();
+        let time_old = start.elapsed();
+        let start = std::time::Instant::now();
+        let list2 = parse(lines_clone).unwrap();
+        println!("Old: {:?} New {:?}", time_old, start.elapsed());
         assert_eq!(
             list,
             vec![
@@ -193,5 +327,6 @@ FOO5=`BAR5`
                 ("FOO5".to_owned(), "BAR5".to_owned()),
             ]
         );
+        assert_eq!(list, list2);
     }
 }

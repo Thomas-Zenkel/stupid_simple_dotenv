@@ -53,7 +53,7 @@ key5=` value with spaces `
 key6 = value with spaces inside
 key 7= value:with#special&😀UTF-8 Chars🦀
 key-8="value:with#special&😀UTF-8 Chars🦀and_quote"
-key9="comments now enabled in the same Line" #this is a comment und will be ignored
+key9="comments now enabled in the same Line" #this is a comment and will be ignored
 ```
 ## License
 

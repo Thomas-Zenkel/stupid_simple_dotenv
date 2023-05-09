@@ -11,14 +11,14 @@
 //!       Ok(_) => println!("Success reading .env"),
 //!       Err(e) if e.kind == "io" =>{
 //!         eprintln!("IO-Error better not ignore! {}", e);
-//!        return Err(e.into());
+//!         // you can return the Error: return Err(e.into());
 //!       },
 //!       Err(e) if e.kind == "LinesError" => {
 //!         eprintln!("Errors in some lines of .env: {}", e);
 //!       },
 //!       Err(e) => {
 //!         eprintln!("Error {}", e);
-//!         return Err(e.into());
+//!         // You can return the Error return Err(e.into());
 //!       },
 //!    };
 //!    let user= match std::env::var("USER") {

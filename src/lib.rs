@@ -182,7 +182,8 @@ fn parse_line(s: &str) -> Result<(&str, &str), Box<dyn Error>> {
     let mut in_name = true;
     let mut in_value = false;
     let mut quotes = 'f';
-    for (pos, c) in s.chars().enumerate() {
+    let mut must_trim = false;
+    for (pos, c) in s.char_indices() {
         match c {
             '"' | '\'' | '`' => {
                 if quotes != 'f' {
@@ -226,7 +227,8 @@ fn parse_line(s: &str) -> Result<(&str, &str), Box<dyn Error>> {
                     continue;
                 }
                 if in_value {
-                    value_end = pos;
+                    value_end = pos - 1;
+                    must_trim = true;
                     break;
                 }
             }
@@ -253,6 +255,12 @@ fn parse_line(s: &str) -> Result<(&str, &str), Box<dyn Error>> {
     } else if value_begin == 0 {
         Err("No value".into())
     } else {
+        if must_trim {
+            {
+                let s = &s[value_begin..=value_end];
+                value_end = value_begin + s.trim_end().len() - 1;
+            }
+        }
         Ok((&s[name_begin..=name_end], &s[value_begin..=value_end]))
     }
 }
@@ -306,6 +314,8 @@ FOO2= BAR2
 FOO3="BAR3"
 FOO4='BAR4'
 FOO5=`BAR5`
+FOO6=BAR6 #comment
+Foo7=BA😀R7 #comment
 "#;
         let lines = env_sim.lines().map(|s| Ok(s.to_owned()));
         let lines_clone = lines.clone();
@@ -323,6 +333,8 @@ FOO5=`BAR5`
                 ("FOO3".to_owned(), "BAR3".to_owned()),
                 ("FOO4".to_owned(), "BAR4".to_owned()),
                 ("FOO5".to_owned(), "BAR5".to_owned()),
+                ("FOO6".to_owned(), "BAR6".to_owned()),
+                ("Foo7".to_owned(), "BA😀R7".to_owned()),
             ]
         );
         assert_eq!(list, list2);

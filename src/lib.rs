@@ -32,7 +32,7 @@ use std::{error::Error, fmt::Display, fs::File, io::BufRead, path::Path};
 pub struct SimpleEnvError {
     pub kind: String,
     message: String,
-    list: Option<Vec<(String, String)>>,
+    pub list: Option<Vec<(String, String)>>,
 }
 
 impl Display for SimpleEnvError {
@@ -85,7 +85,17 @@ fn iter_to_env(list: &Vec<(String, String)>) {
 /// Reads .env file to a vector of key value pairs tuples.
 /// ```rust
 /// fn main() {
-///     let list = stupid_simple_dotenv::to_vec().expect("Can't read .env"); // reads .env file to a vector of key value pairs tuples
+///     let list = match stupid_simple_dotenv::to_vec(){
+///         Ok(list) => list,
+///         Err(e) => {
+///             println!("Error {}", e);
+///             if let Some(list) = e.list{
+///                 list
+///             }else{
+///                 panic!("{}",e.to_string());
+///             }
+///         },
+///     }; // reads .env file to a vector of key value pairs tuples
 ///     for line in list {
 ///         println! ("Key:{}, Value:{}",line.0, line.1);
 ///     }
@@ -277,7 +287,21 @@ mod tests {
 
     #[test]
     fn it_works() {
-        to_env().unwrap();
+        match to_env() {
+            Ok(_) => {
+                //Error expected. Sample .env file has error
+                assert!(false)
+            }
+            Err(e) => {
+                //OK
+                assert_eq!(e.kind, "LinesError");
+                assert_eq!(
+                    e.message
+                        .starts_with("Error in Line 14: No name or value in 'error='"),
+                    true
+                );
+            }
+        }
     }
 
     #[test]

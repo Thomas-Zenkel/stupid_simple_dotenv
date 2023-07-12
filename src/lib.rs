@@ -32,6 +32,7 @@ use std::{error::Error, fmt::Display, fs::File, io::BufRead, path::Path};
 pub struct SimpleEnvError {
     pub kind: String,
     message: String,
+    list: Option<Vec<(String, String)>>,
 }
 
 impl Display for SimpleEnvError {
@@ -49,6 +50,7 @@ impl From<std::io::Error> for SimpleEnvError {
         SimpleEnvError {
             kind: String::from("io"),
             message: error.to_string(),
+            list: None,
         }
     }
 }
@@ -62,12 +64,23 @@ impl From<std::io::Error> for SimpleEnvError {
 ///
 /// ```
 pub fn to_env() -> Result<(), SimpleEnvError> {
-    let list = read(".env")?;
+    match read(".env") {
+        Ok(list) => {
+            iter_to_env(&list);
+            Ok(())
+        }
+        Err(e) => {
+            e.list.as_ref().map(iter_to_env);
+            Err(e)
+        }
+    }
+}
+
+fn iter_to_env(list: &Vec<(String, String)>) {
     for line in list {
-        let (key, value) = (line.0, line.1);
+        let (key, value) = (&line.0, &line.1);
         std::env::set_var(key, value);
     }
-    Ok(())
 }
 /// Reads .env file to a vector of key value pairs tuples.
 /// ```rust
@@ -119,15 +132,7 @@ pub fn get_or(key: &str, default: &str) -> String {
 }
 
 fn read<P: AsRef<Path>>(path: P) -> Result<Vec<(String, String)>, SimpleEnvError> {
-    let f = match File::open(path) {
-        Ok(f) => f,
-        Err(e) => {
-            return Err(SimpleEnvError {
-                kind: String::from("io"),
-                message: e.to_string(),
-            })
-        }
-    };
+    let f = File::open(path)?;
     let lines = std::io::BufReader::new(f).lines();
     parse(lines)
 }
@@ -170,6 +175,7 @@ fn parse(
         Err(SimpleEnvError {
             kind: "LinesError".to_string(),
             message: error_lines.join("\n"),
+            list: Some(list),
         })
     }
 }

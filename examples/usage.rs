@@ -1,6 +1,7 @@
 use stupid_simple_dotenv;
 fn main() {
-    stupid_simple_dotenv::to_env().ok();
+    //Shows errors if any but does not stop the program
+    let _ = stupid_simple_dotenv::to_env().map_err(|e| eprint!("{}", e));
     println!("Hello, {}!", std::env::var("myuser").unwrap()); // Hello, world!
 
     stupid_simple_dotenv::file_to_env("other.env").ok();

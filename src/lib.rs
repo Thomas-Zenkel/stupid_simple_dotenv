@@ -27,6 +27,7 @@
 //! }
 //!
 
+use std::error::Error as StdError;
 use std::{error::Error, fmt::Display, fs::File, io::BufRead, path::Path};
 #[derive(Debug)]
 pub struct SimpleEnvError {
@@ -52,6 +53,25 @@ impl From<std::io::Error> for SimpleEnvError {
             message: error.to_string(),
             list: None,
         }
+    }
+}
+
+pub struct SimpleEnvErrorWrapper(SimpleEnvError);
+
+impl From<SimpleEnvError> for SimpleEnvErrorWrapper {
+    fn from(error: SimpleEnvError) -> Self {
+        SimpleEnvErrorWrapper(error)
+    }
+}
+
+impl Into<Box<dyn StdError>> for SimpleEnvErrorWrapper {
+    fn into(self) -> Box<dyn StdError> {
+        Box::new(self.0)
+    }
+}
+impl From<SimpleEnvError> for std::io::Error {
+    fn from(err: SimpleEnvError) -> Self {
+        std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
     }
 }
 

@@ -27,7 +27,6 @@
 //! }
 //!
 
-use std::error::Error as StdError;
 use std::{error::Error, fmt::Display, fs::File, io::BufRead, path::Path};
 #[derive(Debug)]
 pub struct SimpleEnvError {
@@ -56,19 +55,19 @@ impl From<std::io::Error> for SimpleEnvError {
     }
 }
 
-pub struct SimpleEnvErrorWrapper(SimpleEnvError);
+// pub struct SimpleEnvErrorWrapper(SimpleEnvError);
 
-impl From<SimpleEnvError> for SimpleEnvErrorWrapper {
-    fn from(error: SimpleEnvError) -> Self {
-        SimpleEnvErrorWrapper(error)
-    }
-}
+// impl From<SimpleEnvError> for SimpleEnvErrorWrapper {
+//     fn from(error: SimpleEnvError) -> Self {
+//         SimpleEnvErrorWrapper(error)
+//     }
+// }
 
-impl Into<Box<dyn StdError>> for SimpleEnvErrorWrapper {
-    fn into(self) -> Box<dyn StdError> {
-        Box::new(self.0)
-    }
-}
+// impl Into<Box<dyn StdError>> for SimpleEnvErrorWrapper {
+//     fn into(self) -> Box<dyn StdError> {
+//         Box::new(self.0)
+//     }
+// }
 impl From<SimpleEnvError> for std::io::Error {
     fn from(err: SimpleEnvError) -> Self {
         std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
@@ -211,6 +210,12 @@ fn parse(
 }
 
 fn parse_line(s: &str) -> Result<(&str, &str), Box<dyn Error>> {
+    if s.is_empty() {
+        return Err("Empty line".into());
+    }
+    if s.starts_with('#') {
+        return Err("Comment line".into());
+    }
     let mut name_begin: usize = 0;
     let mut name_end: usize = 0;
     let mut value_begin: usize = 0;
@@ -267,6 +272,9 @@ fn parse_line(s: &str) -> Result<(&str, &str), Box<dyn Error>> {
                     must_trim = true;
                     break;
                 }
+                if in_name {
+                    return Err(format!("Comment character '#' in name part of '{s}'").into());
+                }
             }
             _ => {
                 if in_name {
@@ -316,8 +324,8 @@ mod tests {
                 //OK
                 assert_eq!(e.kind, "LinesError");
                 assert_eq!(
-                    e.message
-                        .starts_with("Error in Line 14: No name or value in 'error='"),
+                    e.message.starts_with("Error in Line ")
+                        && e.message.ends_with("No name or value in 'error='"),
                     true
                 );
             }
@@ -352,6 +360,7 @@ mod tests {
         assert_eq!(true, matches!(parse_line(" FOO\t   = "), Result::Err(_)));
         assert_eq!(true, matches!(parse_line(" FOO\t   ="), Result::Err(_)));
         assert_eq!(true, matches!(parse_line("="), Result::Err(_)));
+        assert_eq!(true, matches!(parse_line("#value=comment"), Result::Err(_)));
     }
 
     #[test]
@@ -366,6 +375,8 @@ FOO4='BAR4'
 FOO5=`BAR5`
 FOO6=BAR6 #comment
 Foo7=BA😀R7 #comment
+#FOO8=BAR8
+FOO9=BAR9
 "#;
         let lines = env_sim.lines().map(|s| Ok(s.to_owned()));
         let lines_clone = lines.clone();
@@ -385,6 +396,7 @@ Foo7=BA😀R7 #comment
                 ("FOO5".to_owned(), "BAR5".to_owned()),
                 ("FOO6".to_owned(), "BAR6".to_owned()),
                 ("Foo7".to_owned(), "BA😀R7".to_owned()),
+                ("FOO9".to_owned(), "BAR9".to_owned()),
             ]
         );
         assert_eq!(list, list2);

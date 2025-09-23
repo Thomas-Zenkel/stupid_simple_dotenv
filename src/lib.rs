@@ -186,7 +186,6 @@ fn parse(
                 if error_lines.len() < 10 {
                     error_lines.push(format!("Error in Line {col}: {e}"));
                 }
-                error_lines.push(format!("Error in Line {col}: {e}"));
                 continue;
             }
         };
@@ -400,5 +399,29 @@ FOO9=BAR9
             ]
         );
         assert_eq!(list, list2);
+    }
+
+    #[test]
+    fn parse_reports_each_error_once() {
+        let env_sim = "FOO=BAR\ninvalid\ninvalid2\n";
+        let lines = env_sim.lines().map(|s| Ok(s.to_owned()));
+        let err = parse(lines).unwrap_err();
+        let messages: Vec<&str> = err.message.lines().collect();
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|line| line.contains("Error in Line 1:"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|line| line.contains("Error in Line 2:"))
+                .count(),
+            1
+        );
     }
 }

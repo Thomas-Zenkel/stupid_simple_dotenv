@@ -70,11 +70,16 @@ impl From<std::io::Error> for SimpleEnvError {
 // }
 impl From<SimpleEnvError> for std::io::Error {
     fn from(err: SimpleEnvError) -> Self {
-        std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
+        std::io::Error::other(err.to_string())
     }
 }
 
-/// Reads .env file stores the key value pairs as environment variables.
+/// Reads .env file and stores the key value pairs as environment variables.
+///
+/// **Note:** This function does NOT override existing environment variables.
+/// This follows the standard dotenv behavior where shell exports take precedence
+/// over .env values. Use [`to_env_override`] if you need to override existing variables.
+///
 /// ```rust
 /// fn main() {
 ///    let _ = stupid_simple_dotenv::to_env(); // reads .env file and stores the key value pairs as environment variables
@@ -95,7 +100,42 @@ pub fn to_env() -> Result<(), SimpleEnvError> {
     }
 }
 
+/// Reads .env file and stores the key value pairs as environment variables,
+/// overriding any existing values.
+///
+/// Unlike [`to_env`], this function will override existing environment variables
+/// with values from the .env file.
+///
+/// ```rust
+/// fn main() {
+///    let _ = stupid_simple_dotenv::to_env_override(); // reads .env file and overrides existing environment variables
+///    let value = std::env::var("key").expect("Key 'key' not found.");
+/// }
+///
+/// ```
+pub fn to_env_override() -> Result<(), SimpleEnvError> {
+    match read(".env") {
+        Ok(list) => {
+            iter_to_env_override(&list);
+            Ok(())
+        }
+        Err(e) => {
+            e.list.as_ref().map(iter_to_env_override);
+            Err(e)
+        }
+    }
+}
+
 fn iter_to_env(list: &Vec<(String, String)>) {
+    for line in list {
+        let (key, value) = (&line.0, &line.1);
+        if std::env::var(key).is_err() {
+            std::env::set_var(key, value);
+        }
+    }
+}
+
+fn iter_to_env_override(list: &Vec<(String, String)>) {
     for line in list {
         let (key, value) = (&line.0, &line.1);
         std::env::set_var(key, value);
@@ -125,7 +165,28 @@ pub fn to_vec() -> Result<Vec<(String, String)>, SimpleEnvError> {
     Ok(list)
 }
 
+/// Reads key value pairs from a file and stores them as environment variables.
+///
+/// **Note:** This function does NOT override existing environment variables.
+/// This follows the standard dotenv behavior where shell exports take precedence
+/// over file values. Use [`file_to_env_override`] if you need to override existing variables.
 pub fn file_to_env<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {
+    let list = read(path)?;
+    for line in list {
+        let (key, value) = (line.0, line.1);
+        if std::env::var(&key).is_err() {
+            std::env::set_var(key, value);
+        }
+    }
+    Ok(())
+}
+
+/// Reads key value pairs from a file and stores them as environment variables,
+/// overriding any existing values.
+///
+/// Unlike [`file_to_env`], this function will override existing environment variables
+/// with values from the file.
+pub fn file_to_env_override<P: AsRef<Path>>(path: P) -> Result<(), Box<dyn std::error::Error>> {
     let list = read(path)?;
     for line in list {
         let (key, value) = (line.0, line.1);
@@ -423,5 +484,64 @@ FOO9=BAR9
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn test_iter_to_env_does_not_override() {
+        let key = "TEST_NO_OVERRIDE_KEY";
+        let original_value = "original_value";
+        let new_value = "new_value";
+
+        // Set the environment variable first
+        std::env::set_var(key, original_value);
+
+        // Try to set it via iter_to_env (should NOT override)
+        let list = vec![(key.to_owned(), new_value.to_owned())];
+        iter_to_env(&list);
+
+        // The original value should still be there
+        assert_eq!(std::env::var(key).unwrap(), original_value);
+
+        // Cleanup
+        std::env::remove_var(key);
+    }
+
+    #[test]
+    fn test_iter_to_env_sets_new_var() {
+        let key = "TEST_NEW_VAR_KEY";
+        let value = "test_value";
+
+        // Ensure the variable doesn't exist
+        std::env::remove_var(key);
+
+        // Set it via iter_to_env
+        let list = vec![(key.to_owned(), value.to_owned())];
+        iter_to_env(&list);
+
+        // The value should be set
+        assert_eq!(std::env::var(key).unwrap(), value);
+
+        // Cleanup
+        std::env::remove_var(key);
+    }
+
+    #[test]
+    fn test_iter_to_env_override_overrides() {
+        let key = "TEST_OVERRIDE_KEY";
+        let original_value = "original_value";
+        let new_value = "new_value";
+
+        // Set the environment variable first
+        std::env::set_var(key, original_value);
+
+        // Override it via iter_to_env_override
+        let list = vec![(key.to_owned(), new_value.to_owned())];
+        iter_to_env_override(&list);
+
+        // The new value should be there
+        assert_eq!(std::env::var(key).unwrap(), new_value);
+
+        // Cleanup
+        std::env::remove_var(key);
     }
 }
